@@ -1,0 +1,10 @@
+*
+*.*
+!*/
+2DRenderer/solution1
+!*.sv
+!*.cpp
+!*.c
+!*.h
+!*.hpp
+!.gitignore
