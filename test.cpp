@@ -31,16 +31,31 @@ int main() {
         game_info_ram[i] = 0;
     }
     for (int i = 0; i < 256 * 128 / 4; i++) {
-        bullet_map[i] = (ap_uint<64>)Bullet_sprite[4 * i] | ((ap_uint<64>)Bullet_sprite[4 * i + 1] << 16) | ((ap_uint<64>)Bullet_sprite[4 * i + 2] << 32) | ((ap_uint<64>)Bullet_sprite[4 * i + 3] << 48);
+        bullet_map[i] = (ap_uint<64>)Bullet_sprite[4 * i] | ((ap_uint<64>)Bullet_sprite[4 * i + 1] << 16) | ((ap_uint<64>)Bullet_sprite[4 * i + 2] << 32) |
+                        ((ap_uint<64>)Bullet_sprite[4 * i + 3] << 48);
     }
+    // Enemy bullet test
     // Tile (0,0)
     game_info_ram[0] = (compose_entity(0, 0, 0, 0, 1)) | (compose_entity(16, 16, 0, 1, 1) << 32);
     // Tile (0,1)
     game_info_ram[8] = (compose_entity(32, 0, 0, 2, 1)) | (compose_entity(32, 16, 0, 3, 1) << 32);
     // Tile (0,2)
-    game_info_ram[2*8] = (compose_entity(64, 0, 0, 14, 1));
+    game_info_ram[2 * 8] = (compose_entity(64, 0, 0, 14, 1));
     // Tile (0,3)
-    game_info_ram[3*8] = (compose_entity(96, 0, 0, 15, 1));
+    game_info_ram[3 * 8] = (compose_entity(96, 0, 0, 15, 1));
+    // Tile (1,3)
+    game_info_ram[3 * 8 + 96] = (compose_entity(96, 32, 0, 15, 1));
+    // Player bullet test
+    // Tile (0,4)
+    game_info_ram[1344 + 4 * 4] = (compose_entity(128, 0, 0, 0, 1)) | (compose_entity(128, 16, 0, 1, 1) << 32);
+    // Tile (0,5)
+    game_info_ram[1344 + 5 * 4] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
+    // Tile (0,6)
+    game_info_ram[1344 + 6 * 4] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
+    // Tile (1,5)
+    game_info_ram[1344 + 5 * 4 + 48] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
+    // Tile (1,6)
+    game_info_ram[1344 + 6 * 4 + 48] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
     bool quit = false;
     int fb_id = 0;
     while (!quit) {

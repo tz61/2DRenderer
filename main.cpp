@@ -2,8 +2,8 @@
 #include <header.hpp>
 #include <hls_burst_maxi.h>
 #include <hls_math.h>
-// just for vscode
-#define __SYNTHESIS__
+// just for vscode linter
+// #define __SYNTHESIS__
 // 16*(256*128)/1024 = 512KBit =  15BRAMs, size 0x10000 bytes
 #ifndef __SYNTHESIS__
 void render_2d(ap_uint<64> *vram, ap_uint<64> *game_info_ram, ap_uint<64> *bullet_map, ap_uint<1> fb1_alt) {
@@ -93,7 +93,7 @@ render_frame_tile_y:
                 for (int l = 0; l < TILE_WIDTH; l++) {
 #pragma HLS PIPELINE off
                     // used for testing
-                    // tile_fb[k * TILE_WIDTH + l] = k<<11|l<<6|(4<<1)|0;
+                    // tile_fb[k * TILE_WIDTH + l] = (k&0xFF)<<24|(l&0xFF)<<16|(4<<8)|0;
                     tile_fb[k * TILE_WIDTH + l] = 0;
                 }
             }
@@ -105,10 +105,11 @@ render_frame_tile_y:
 #pragma HLS PIPELINE off
                 render_enemy_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
+                    ap_uint<8> alpha_ch = tmp_pixel(7, 0);
                     for (int m = 0; m < MAX_ENEMY_BULLETS_IN_TILE; m++) {
+                        // if you need less drawn just change macro here MAX_ENEMY_BULLETS_IN_TILE
                     render_enemy_enum_bullets:
                         ap_uint<32> tmp_bullet = game_info.enemy_bullets[(i * TILE_X_COUNT + j) * MAX_ENEMY_BULLETS_IN_TILE + m];
-                        uint32_t tmp_bullet_aa = tmp_bullet;
                         if (GET_VALID(tmp_bullet) == 1) { // if valid
                             sprite_t tmp_sprite = get_enemy_bullet_info(GET_TYPE(tmp_bullet));
                             // TODO rotation and then check whether on current pixel
@@ -135,7 +136,12 @@ render_frame_tile_y:
                             int sprite_addr = (tmp_sprite.y + offset_y) * 256 + (tmp_sprite.x + offset_x);
                             ap_uint<16> tmp_color = ((bullet_sprite[sprite_addr / 4] >> ((sprite_addr & 0x3) * 16))) & 0xFFFF;
                             if ((tmp_color & 0xFFFE) != 0x1204) {
-                                tmp_pixel = tmp_color;
+                                if (tmp_color & 0x1) {
+                                    alpha_ch |= 0x2; // bit 1 indicate enemy bullet
+                                }
+                                tmp_pixel = (RGB_DITHER(((ap_uint<64>)tmp_color))) | (alpha_ch);
+                                // RGB_DITHER got lowest bit to 1
+                                // and lowest [7:1] bit reserved (alpha_ch)
                             }
                         } else {
                             continue;
@@ -144,6 +150,47 @@ render_frame_tile_y:
                     tile_fb[k * TILE_WIDTH + l] = tmp_pixel;
                 }
             }
+        render_player_bullets:
+            for (int k = 0; k < TILE_HEIGHT; k++) {
+#pragma HLS PIPELINE off
+            render_player_bullets_x:
+                for (int l = 0; l < TILE_WIDTH; l++) {
+#pragma HLS PIPELINE off
+                render_player_bullets_y:
+                    ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
+                    ap_uint<8> alpha_ch = tmp_pixel(7, 0);
+                    for (int m = 0; m < MAX_PLAYER_BULLETS_IN_TILE; m++) {
+                        // if you need less just change macro here MAX_PLAYER_BULLETS_IN_TILE
+                    render_player_enum_bullets:
+                        ap_uint<32> tmp_bullet = game_info.player_bullets[(i * TILE_X_COUNT + j) * MAX_PLAYER_BULLETS_IN_TILE + m];
+                        if (GET_VALID(tmp_bullet) == 1) { // if valid
+                            sprite_t tmp_sprite = get_player_bullet_info(GET_TYPE(tmp_bullet));
+                            int cur_pos_x = j * TILE_WIDTH + l;
+                            int cur_pos_y = i * TILE_HEIGHT + k;
+                            if (!(GET_X(tmp_bullet) <= cur_pos_x && cur_pos_x < GET_X(tmp_bullet) + tmp_sprite.width)) {
+                                continue;
+                            }
+                            if (!(GET_Y(tmp_bullet) <= cur_pos_y && cur_pos_y < GET_Y(tmp_bullet) + tmp_sprite.height)) {
+                                continue;
+                            }
+                            int offset_x = cur_pos_x - GET_X(tmp_bullet);
+                            int offset_y = cur_pos_y - GET_Y(tmp_bullet);
+                            int sprite_addr = (tmp_sprite.y + offset_y) * 256 + (tmp_sprite.x + offset_x);
+                            ap_uint<16> tmp_color = ((bullet_sprite[sprite_addr / 4] >> ((sprite_addr & 0x3) * 16))) & 0xFFFF;
+                            if ((tmp_color & 0xFFFE) != 0x1204) {
+                                if (tmp_color & 0x1) {
+                                    alpha_ch |= 0x4; // bit 2 indicate host bullet
+                                }
+                                tmp_pixel = (RGB_DITHER(((ap_uint<64>)tmp_color))) | (alpha_ch);
+                            }
+                        } else {
+                            continue;
+                        }
+                    } // end of render_enemy_enum_bullets
+                    tile_fb[k * TILE_WIDTH + l] = tmp_pixel;
+                }
+            }
+// Final flush
 // 32 pixel, 32 * 4 = 128 Byte = 16 Beat * 8Byte flush the tile to DDR
 #ifdef __SYNTHESIS__
         flush_tile_y:
@@ -153,7 +200,7 @@ render_frame_tile_y:
                 for (int l = 0; l < 16; l++) {
 #pragma HLS PIPELINE off
                     // lower 16bit for first 1 pixel, upper 16bit for second pixel
-                    vram.write((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32))));
+                    vram.write(ap_uint<64>(tile_fb[k * TILE_WIDTH + 2 * l]) | (ap_uint<64>(tile_fb[k * TILE_WIDTH + 2 * l + 1]) << 32));
                 }
                 vram.write_response();
             }
@@ -162,8 +209,7 @@ render_frame_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
                 dest_vram = vram + (0 + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8;
                 for (int l = 0; l < 16; l++) {
-                    *dest_vram =
-                        (RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32)));
+                    *dest_vram = ap_uint<64>(tile_fb[k * TILE_WIDTH + 2 * l]) | (ap_uint<64>(tile_fb[k * TILE_WIDTH + 2 * l + 1]) << 32);
                     dest_vram++;
                 }
             }

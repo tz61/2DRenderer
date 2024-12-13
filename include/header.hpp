@@ -10,7 +10,7 @@
 #define TILE_Y_COUNT RENDER_HEIGHT / TILE_HEIGHT
 // TILE: 12 x 14
 #define PIX_DEPTH 32
-#define TILE_DEPTH 16
+#define TILE_DEPTH 32
 
 #define AXI_WIDTH 64
 #define TILE_SIZE TILE
@@ -58,6 +58,7 @@ typedef struct {
 #define GAME_INFO_ADDR 0x810000
 #define READ_BURST_BEATS 256
 #define WRITE_BURST_BEATS 256
+// take in RGBD5551
 #define RGB_DITHER(x) ((((x >> (1 + 2 * 5)) & 0x1F) << (24 + 3)) | (((x >> (1 + 1 * 5)) & 0x1F) << (16 + 3)) | (((x >> 1) & 0x1F) << (8 + 3)) | 0x1)
 typedef struct {
     uint32_t x;
