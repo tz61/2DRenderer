@@ -3,7 +3,7 @@
 #include <hls_burst_maxi.h>
 #include <hls_math.h>
 // just for vscode
-// #define __SYNTHESIS__
+#define __SYNTHESIS__
 // 16*(256*128)/1024 = 512KBit =  15BRAMs, size 0x10000 bytes
 #ifndef __SYNTHESIS__
 void render_2d(ap_uint<64> *vram, ap_uint<64> *game_info_ram, ap_uint<64> *bullet_map, ap_uint<1> fb1_alt) {
@@ -13,9 +13,9 @@ void render_2d(hls::burst_maxi<ap_uint<64>> vram,
 // ap_ctrl mode: handshake
 #endif
 
-	ap_uint<64> bullet_sprite[BULLET_MAP_WIDTH * BULLET_MAP_HEIGHT / 4];
-	game_info_t game_info;
-	ap_uint<TILE_DEPTH> tile_fb[TILE_WIDTH * TILE_HEIGHT];
+    ap_uint<64> bullet_sprite[BULLET_MAP_WIDTH * BULLET_MAP_HEIGHT / 4];
+    game_info_t game_info;
+    ap_uint<TILE_DEPTH> tile_fb[TILE_WIDTH * TILE_HEIGHT];
 #pragma HLS INTERFACE mode = ap_ctrl_hs port = return
 #pragma HLS INTERFACE mode = m_axi port = vram offset = off
 #ifndef __SYNTHESIS__
@@ -30,7 +30,7 @@ void render_2d(hls::burst_maxi<ap_uint<64>> vram,
 read_bullet_map:
     // 32 burst read of 256 beats
     for (uint32_t i = 0; i < 32; i++) {
-        vram.read_request(BULLET_MAP_ADDR / 8, READ_BURST_BEATS);
+        vram.read_request(i * READ_BURST_BEATS + BULLET_MAP_ADDR / 8, READ_BURST_BEATS);
         for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
 #pragma HLS PIPELINE off
             ap_uint<AXI_WIDTH> tmp_read = vram.read();
@@ -62,7 +62,7 @@ read_bullet_map:
 read_game_info:
     // 8 burst read of 256 beats
     for (uint32_t i = 0; i < 8; i++) {
-        vram.read_request(GAME_INFO_ADDR / 8, READ_BURST_BEATS);
+        vram.read_request(i * READ_BURST_BEATS + GAME_INFO_ADDR / 8, READ_BURST_BEATS);
         for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
 #pragma HLS PIPELINE off
             ap_uint<AXI_WIDTH> tmp_read = vram.read();
@@ -84,17 +84,17 @@ read_game_info:
 render_frame_tile_y:
     for (int i = 0; i < TILE_Y_COUNT; i++) {
 #pragma HLS PIPELINE off
-        render_frame_tile_x:
+    render_frame_tile_x:
         for (int j = 0; j < TILE_X_COUNT; j++) {
 #pragma HLS PIPELINE off
-            clear_tile_y:
+        clear_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
             clear_tile_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
 #pragma HLS PIPELINE off
-                	// used for testing
-                    //tile_fb[k * TILE_WIDTH + l] = k<<11|l<<6|(4<<1)|0;
-                	tile_fb[k * TILE_WIDTH + l] = 0;
+                    // used for testing
+                    // tile_fb[k * TILE_WIDTH + l] = k<<11|l<<6|(4<<1)|0;
+                    tile_fb[k * TILE_WIDTH + l] = 0;
                 }
             }
         render_enemy_bullets:
@@ -153,7 +153,7 @@ render_frame_tile_y:
                 for (int l = 0; l < 16; l++) {
 #pragma HLS PIPELINE off
                     // lower 16bit for first 1 pixel, upper 16bit for second pixel
-                    vram.write((RGB_DITHER(tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER(tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32))));
+                    vram.write((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32))));
                 }
                 vram.write_response();
             }
@@ -162,7 +162,8 @@ render_frame_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
                 dest_vram = vram + (0 + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8;
                 for (int l = 0; l < 16; l++) {
-                    *dest_vram = (RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32)));
+                    *dest_vram =
+                        (RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l])) | ((RGB_DITHER((ap_uint<64>)tile_fb[k * TILE_WIDTH + 2 * l + 1]) << (32)));
                     dest_vram++;
                 }
             }
