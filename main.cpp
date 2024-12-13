@@ -106,7 +106,7 @@ render_frame_tile_y:
                 render_enemy_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
-                    for (int m = 0; m < MAX_ENEMY_BULLETS_IN_TILE; m++) {
+                    for (int m = 0; m < 4; m++) {
                         // if you need less drawn just change macro here MAX_ENEMY_BULLETS_IN_TILE
                     render_enemy_enum_bullets:
                         ap_uint<32> tmp_bullet = game_info.enemy_bullets[(i * TILE_X_COUNT + j) * MAX_ENEMY_BULLETS_IN_TILE + m];
@@ -159,7 +159,7 @@ render_frame_tile_y:
                 render_player_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
-                    for (int m = 0; m < MAX_PLAYER_BULLETS_IN_TILE; m++) {
+                    for (int m = 0; m < 2; m++) {
                         // if you need less just change macro here MAX_PLAYER_BULLETS_IN_TILE
                     render_player_enum_bullets:
                         ap_uint<32> tmp_bullet = game_info.player_bullets[(i * TILE_X_COUNT + j) * MAX_PLAYER_BULLETS_IN_TILE + m];
