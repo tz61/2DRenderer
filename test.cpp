@@ -31,7 +31,7 @@ int main() {
         game_info_ram[i] = 0;
     }
     for (int i = 0; i < 256 * 128 / 4; i++) {
-        bullet_map[i] = Bullet_sprite[4 * i] | (Bullet_sprite[4 * i + 1] << 16) | (Bullet_sprite[4 * i + 2] << 32) | (Bullet_sprite[4 * i + 3] << 48);
+        bullet_map[i] = (ap_uint<64>)Bullet_sprite[4 * i] | ((ap_uint<64>)Bullet_sprite[4 * i + 1] << 16) | ((ap_uint<64>)Bullet_sprite[4 * i + 2] << 32) | ((ap_uint<64>)Bullet_sprite[4 * i + 3] << 48);
     }
     // Tile (0,0)
     game_info_ram[0] = (compose_entity(0, 0, 0, 0, 1)) | (compose_entity(16, 16, 0, 1, 1) << 32);
