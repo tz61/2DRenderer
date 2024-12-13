@@ -7,7 +7,14 @@
 
 // void trinity_renderer(fb_id_t fb_id, ap_uint<128> *vram, ap_uint<9> angle);
 // 0x12c000 for 1 single frame buffer
-uint64_t vram[0x4B0000 / 8];
+ap_uint<64> vram[0x4B0000 / 8];
+ap_uint<64> bullet_map[(256 * 128 * 2) / 8];
+ap_uint<64> game_info_ram[0x4000 / 8];
+extern uint16_t Bullet_sprite[128 * 256];
+void render_2d(ap_uint<64> *vram, ap_uint<64> *game_info_ram, ap_uint<64> *bullet_map, ap_uint<1> fb1_alt);
+uint64_t compose_entity(uint32_t X, uint32_t Y, uint32_t ROT, uint32_t TYPE, uint32_t VALID) {
+    return ((X) | ((Y) << 9) | ((ROT) << 18) | ((TYPE) << 27) | ((VALID) << 31));
+}
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -16,10 +23,22 @@ int main() {
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
 
     SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, FB_WIDTH, FB_HEIGHT);
-    for (int i = 0; i < 640 * 240 / 2; i++) {
+    for (int i = 0; i < 640 * 480 / 2; i++) {
         // populate with red
         vram[i] = 0xFF0000FFFF000000;
     }
+    for (int i = 0; i < 0x4000 / 8; i++) {
+        game_info_ram[i] = 0;
+    }
+    for (int i = 0; i < 256 * 128 / 4; i++) {
+        bullet_map[i] = Bullet_sprite[4 * i] | (Bullet_sprite[4 * i + 1] << 16) | (Bullet_sprite[4 * i + 2] << 32) | (Bullet_sprite[4 * i + 3] << 48);
+    }
+    // Tile (0,0)
+    game_info_ram[0] = (compose_entity(0, 0, 0, 0, 1)) | (compose_entity(16, 16, 0, 1, 1) << 32);
+    // Tile (0,1)
+    game_info_ram[8] = (compose_entity(32, 0, 0, 2, 1)) | (compose_entity(32, 16, 0, 3, 1) << 32);
+    // Tile (0,2)
+    game_info_ram[16] = (compose_entity(64, 0, 0, 14, 1));
     bool quit = false;
     int fb_id = 0;
     while (!quit) {
@@ -40,7 +59,7 @@ int main() {
         Uint64 end = SDL_GetPerformanceCounter();
         float fps = SDL_GetPerformanceFrequency() / static_cast<float>(end - start);
         SDL_SetWindowTitle(window, ("2DRenderer, FPS: " + std::to_string(fps)).c_str());
-
+        render_2d(vram, game_info_ram, bullet_map, 0);
         SDL_UpdateTexture(texture, nullptr, vram, FB_WIDTH * 4);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
         //

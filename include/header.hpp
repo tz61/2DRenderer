@@ -1,5 +1,5 @@
-#include <hls_math.h>
 #include <ap_int.h>
+#include <hls_math.h>
 #define FB_WIDTH 640
 #define FB_HEIGHT 480
 #define RENDER_WIDTH 384
@@ -20,74 +20,45 @@
 
 #define FB_START_X (33 - 1)
 #define FB_START_Y (17 - 1)
-// direction存 链表里
-typedef __attribute__((packed)) struct {
-    // x 9 bit y 9bit rotation 9bit(512 degrees),type 4bit, valid 1bit
-    uint32_t x : 9;        // 0-511
-    uint32_t y : 9;        // 0-511
-    uint32_t rotation : 9; // 0-511 mapped to 0-359
-    uint32_t type : 4;     // 0-15 types
-    uint32_t valid : 1;
-} bullet_t; // in total 4B
+// direction stored in chained list
+// typedef __attribute__((packed)) struct {
+//     // x 9 bit y 9bit rotation 9bit(512 degrees),type 4bit, valid 1bit
+//     uint32_t x : 9;        // 0-511
+//     uint32_t y : 9;        // 0-511
+//     uint32_t rotation : 9; // 0-511 mapped to 0-359
+//     uint32_t type : 4;     // 0-15 types
+//     uint32_t valid : 1;
+// } bullet_t; // in total 4B
+#define GET_X(x) x(8, 0)
+#define GET_Y(x) x(17, 9)
+#define GET_ROTATION(x) x(26, 18)
+#define GET_TYPE(x) x(30, 27)
+#define GET_VALID(x) x(31, 31)
+
 #define MAX_ENEMY_BULLETS_IN_TILE 16
-#define MAX_PLAYER_BULLETS 256
+#define MAX_PLAYER_BULLETS_IN_TILE 8
 // max 2048 bullets of enemy 2048*4B = 8KiB
 // max 512 bullets of host256*4B= 1KiB, intotal 9KiB, 2 bram
 typedef struct {
-    bullet_t enemy_bullets[TILE_X_COUNT*TILE_Y_COUNT*MAX_ENEMY_BULLETS_IN_TILE];
-    bullet_t player_bullets[MAX_PLAYER_BULLETS];
-} game_bullets_t;
-#define MAX_ENEMYS 15
-typedef __attribute__((packed)) struct {
-    uint32_t x : 9;        // 0-511
-    uint32_t y : 9;        // 0-511
-    uint32_t rotation : 9; // 0-511 mapped to 0-359
-    uint32_t type : 4;     // 0-2 types
-    uint32_t valid : 1;
-} entity_t; // 4B
-typedef struct {
-    uint32_t x : 9;        // 0-511
-    uint32_t y : 9;        // 0-511
-    uint32_t rotation : 9; // not used
-    uint32_t type : 4;     // 0-2 types
-    uint32_t valid : 1;
-} dialog_t; // 4B
-typedef struct {
-    uint32_t x : 9;        // 0-511
-    uint32_t y : 9;        // 0-511
-    uint32_t rotation : 9; // not used
-    uint32_t type : 4;     // 0-2 types
-    uint32_t valid : 1;
-} big_image_t; // 4B
-// max 16 enemy 1 player
-typedef struct {
-    entity_t enemies[MAX_ENEMYS];
-    entity_t player;
-    dialog_t dialog_player;
-    dialog_t dialog_enemy;
-    big_image_t player_image;
-    big_image_t enemy_image;
-} game_misc_t; // 80 bytes
+    ap_uint<32> enemy_bullets[TILE_X_COUNT * TILE_Y_COUNT * MAX_ENEMY_BULLETS_IN_TILE];   // 2688
+    ap_uint<32> player_bullets[TILE_X_COUNT * TILE_Y_COUNT * MAX_PLAYER_BULLETS_IN_TILE]; // 1344 max 8 in single tile
+    ap_uint<32> entities[64];
+    // first 14 enemy, 15th player, 16th boss, 17-24 item.
+} game_info_t;
+// (12*14*(16+8)+64)*4Byte = 0x4000 Byte
+// 0x4000/8B=2048
+// 2048/(256Beat)=8Burst
 // dialog player, dialog enemy, player image, enemy image, 绘制时直接覆盖弹幕，反正不用判定
 
-// 可以替换sprite
-// 画自机还是基于tile,根据id hardcode ddr地址，然后固定好line stride.
-// 遇到透明像素不绘制. 每个tile画之前清空
-//#ifdef __SYNTHESIS__
-//#define BULLET_MAP_ADDR 0x00800000
-//#else
-//#define BULLET_MAP_ADDR 0
-//#endif
 #define BULLET_MAP_ADDR 0x800000
 #define FB0_BASE 0x01000000
 #define FB1_BASE 0x0112c000
 #define FB0_ALT_BASE 0x01258000
 #define FB1_ALT_BASE 0x01384000
-#define BULLET_INFO_ADDR BULLET_MAP_ADDR + BULLET_MAP_HEIGHT *BULLET_MAP_WIDTH *BULLET_MAP_DEPTH / 8
-#define GAME_MISC_ADDR BULLET_INFO_ADDR + (TILE_X_COUNT*TILE_Y_COUNT*MAX_ENEMY_BULLETS_IN_TILE + MAX_PLAYER_BULLETS) * sizeof(bullet_t)
+#define GAME_INFO_ADDR 0x810000
 #define READ_BURST_BEATS 256
 #define WRITE_BURST_BEATS 256
-#define RGB_DITHER(x) ((((x>>(1+2*5))&0x1F)<<(24+3))|(((x>>(1+1*5))&0x1F)<<(16+3))|(((x>>1)&0x1F)<<(8+3))|0x0)
+#define RGB_DITHER(x) ((((x >> (1 + 2 * 5)) & 0x1F) << (24 + 3)) | (((x >> (1 + 1 * 5)) & 0x1F) << (16 + 3)) | (((x >> 1) & 0x1F) << (8 + 3)) | 0x1)
 typedef struct {
     uint32_t x;
     uint32_t y;
