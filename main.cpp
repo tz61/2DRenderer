@@ -195,7 +195,11 @@ render_frame_tile_y:
 #ifdef __SYNTHESIS__
         flush_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
-                vram.write_request((FB1_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8, 16);
+                if (fb1_alt) {
+                    vram.write_request((FB1_ALT_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8, 16);
+                } else {
+                    vram.write_request((FB1_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8, 16);
+                }
             flush_tile_x:
                 for (int l = 0; l < 16; l++) {
 #pragma HLS PIPELINE off
