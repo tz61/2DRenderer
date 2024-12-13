@@ -38,7 +38,9 @@ int main() {
     // Tile (0,1)
     game_info_ram[8] = (compose_entity(32, 0, 0, 2, 1)) | (compose_entity(32, 16, 0, 3, 1) << 32);
     // Tile (0,2)
-    game_info_ram[16] = (compose_entity(64, 0, 0, 14, 1));
+    game_info_ram[2*8] = (compose_entity(64, 0, 0, 14, 1));
+    // Tile (0,3)
+    game_info_ram[3*8] = (compose_entity(96, 0, 0, 15, 1));
     bool quit = false;
     int fb_id = 0;
     while (!quit) {

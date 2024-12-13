@@ -83,9 +83,11 @@ read_game_info:
 #endif
 render_frame_tile_y:
     for (int i = 0; i < TILE_Y_COUNT; i++) {
-    render_frame_tile_x:
+#pragma HLS PIPELINE off
+        render_frame_tile_x:
         for (int j = 0; j < TILE_X_COUNT; j++) {
-        clear_tile_y:
+#pragma HLS PIPELINE off
+            clear_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
             clear_tile_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
@@ -97,8 +99,10 @@ render_frame_tile_y:
             }
         render_enemy_bullets:
             for (int k = 0; k < TILE_HEIGHT; k++) {
+#pragma HLS PIPELINE off
             render_enemy_bullets_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
+#pragma HLS PIPELINE off
                 render_enemy_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     for (int m = 0; m < MAX_ENEMY_BULLETS_IN_TILE; m++) {
