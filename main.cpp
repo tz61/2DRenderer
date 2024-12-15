@@ -19,22 +19,24 @@ void render_2d(hls::burst_maxi<ap_uint<64>> vram,
 #pragma HLS INTERFACE mode = ap_ctrl_hs port = return
 #pragma HLS INTERFACE mode = m_axi port = vram offset = off
 #ifndef __SYNTHESIS__
-    for (uint32_t i = 0; i < 32; i++) {
-        for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
+    for (uint32_t i = 0; i < 128; i++) {
+        for (uint32_t j = 0; j < 32; j++) {
             ap_uint<AXI_WIDTH> tmp_read = *bullet_map;
-            bullet_sprite[i * READ_BURST_BEATS + j] = tmp_read;
+            bullet_sprite[i * 32 + j] = tmp_read;
             bullet_map++;
         }
+        bullet_map += 32;
     }
 #else
 read_bullet_map:
     // 32 burst read of 256 beats
-    for (uint32_t i = 0; i < 32; i++) {
-        vram.read_request(i * READ_BURST_BEATS + BULLET_MAP_ADDR / 8, READ_BURST_BEATS);
-        for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
+	// new: 128 burst read of 32 beats(128 width)
+    for (uint32_t i = 0; i < 128; i++) {
+        vram.read_request(i * 64 + BULLET_MAP_ADDR / 8, 32);
+        for (uint32_t j = 0; j < 32; j++) {
 #pragma HLS PIPELINE off
             ap_uint<AXI_WIDTH> tmp_read = vram.read();
-            bullet_sprite[i * READ_BURST_BEATS + j] = tmp_read;
+            bullet_sprite[i * 32 + j] = tmp_read;
         }
         // no response for read
     }
@@ -83,30 +85,33 @@ read_game_info:
 #endif
 render_frame_tile_y:
     for (int i = 0; i < TILE_Y_COUNT; i++) {
-#pragma HLS PIPELINE off
+        // #pragma HLS PIPELINE off
     render_frame_tile_x:
         for (int j = 0; j < TILE_X_COUNT; j++) {
-#pragma HLS PIPELINE off
+            // #pragma HLS PIPELINE off
         clear_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
             clear_tile_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
-#pragma HLS PIPELINE off
-                    // used for testing
-                    // tile_fb[k * TILE_WIDTH + l] = (k&0xFF)<<24|(l&0xFF)<<16|(4<<8)|0;
+                    // #pragma HLS PIPELINE off
+                    //  used for testing
+                    //  tile_fb[k * TILE_WIDTH + l] = (k&0xFF)<<24|(l&0xFF)<<16|(4<<8)|0;
                     tile_fb[k * TILE_WIDTH + l] = 0;
                 }
             }
         render_enemy_bullets:
             for (int k = 0; k < TILE_HEIGHT; k++) {
-#pragma HLS PIPELINE off
+                // #pragma HLS PIPELINE off
             render_enemy_bullets_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
-#pragma HLS PIPELINE off
+#pragma HLS PIPELINE
+//#pragma HLS UNROLL factor = 4
+//#pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 4
                 render_enemy_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
                     for (int m = 0; m < 4; m++) {
+#pragma HLS PIPELINE
                         // if you need less drawn just change macro here MAX_ENEMY_BULLETS_IN_TILE
                     render_enemy_enum_bullets:
                         ap_uint<32> tmp_bullet = game_info.enemy_bullets[(i * TILE_X_COUNT + j) * MAX_ENEMY_BULLETS_IN_TILE + m];
@@ -133,7 +138,7 @@ render_frame_tile_y:
                             }
                             int offset_x = cur_pos_x - GET_X(tmp_bullet);
                             int offset_y = cur_pos_y - GET_Y(tmp_bullet);
-                            int sprite_addr = (tmp_sprite.y + offset_y) * 256 + (tmp_sprite.x + offset_x);
+                            int sprite_addr = (tmp_sprite.y + offset_y) * BULLET_MAP_WIDTH + (tmp_sprite.x + offset_x);
                             ap_uint<16> tmp_color = ((bullet_sprite[sprite_addr / 4] >> ((sprite_addr & 0x3) * 16))) & 0xFFFF;
                             if ((tmp_color & 0xFFFE) != 0x1204) {
                                 if (tmp_color & 0x1) {
@@ -152,14 +157,17 @@ render_frame_tile_y:
             }
         render_player_bullets:
             for (int k = 0; k < TILE_HEIGHT; k++) {
-#pragma HLS PIPELINE off
+                // #pragma HLS PIPELINE off
             render_player_bullets_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
-#pragma HLS PIPELINE off
+#pragma HLS PIPELINE
+//#pragma HLS UNROLL factor = 2
+//#pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 2
                 render_player_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
                     for (int m = 0; m < 2; m++) {
+#pragma HLS PIPELINE
                         // if you need less just change macro here MAX_PLAYER_BULLETS_IN_TILE
                     render_player_enum_bullets:
                         ap_uint<32> tmp_bullet = game_info.player_bullets[(i * TILE_X_COUNT + j) * MAX_PLAYER_BULLETS_IN_TILE + m];
@@ -175,7 +183,7 @@ render_frame_tile_y:
                             }
                             int offset_x = cur_pos_x - GET_X(tmp_bullet);
                             int offset_y = cur_pos_y - GET_Y(tmp_bullet);
-                            int sprite_addr = (tmp_sprite.y + offset_y) * 256 + (tmp_sprite.x + offset_x);
+                            int sprite_addr = (tmp_sprite.y + offset_y) * BULLET_MAP_WIDTH + (tmp_sprite.x + offset_x);
                             ap_uint<16> tmp_color = ((bullet_sprite[sprite_addr / 4] >> ((sprite_addr & 0x3) * 16))) & 0xFFFF;
                             if ((tmp_color & 0xFFFE) != 0x1204) {
                                 if (tmp_color & 0x1) {
@@ -196,7 +204,8 @@ render_frame_tile_y:
         flush_tile_y:
             for (int k = 0; k < TILE_HEIGHT; k++) {
                 if (fb1_alt) {
-                    vram.write_request((FB1_ALT_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8, 16);
+                    vram.write_request((FB1_ALT_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8,
+                                       16);
                 } else {
                     vram.write_request((FB1_BASE + ((FB_START_Y + i * TILE_HEIGHT + k) * FB_WIDTH + (FB_START_X + j * TILE_WIDTH)) * PIX_DEPTH / 8) / 8, 16);
                 }

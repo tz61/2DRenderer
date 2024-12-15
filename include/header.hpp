@@ -15,7 +15,7 @@
 #define AXI_WIDTH 64
 #define TILE_SIZE TILE
 #define BULLET_MAP_DEPTH 16
-#define BULLET_MAP_WIDTH 256
+#define BULLET_MAP_WIDTH 128
 #define BULLET_MAP_HEIGHT 128
 
 #define FB_START_X (33 - 1)

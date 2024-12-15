@@ -4,18 +4,22 @@
 #include <string>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
-
+#include <fstream>
 // void trinity_renderer(fb_id_t fb_id, ap_uint<128> *vram, ap_uint<9> angle);
 // 0x12c000 for 1 single frame buffer
 ap_uint<64> vram[0x4B0000 / 8];
 ap_uint<64> bullet_map[(256 * 128 * 2) / 8];
 ap_uint<64> game_info_ram[0x4000 / 8];
-extern uint16_t Bullet_sprite[128 * 256];
+uint16_t Bullet_sprite[128 * 256];
 void render_2d(ap_uint<64> *vram, ap_uint<64> *game_info_ram, ap_uint<64> *bullet_map, ap_uint<1> fb1_alt);
 uint64_t compose_entity(uint32_t X, uint32_t Y, uint32_t ROT, uint32_t TYPE, uint32_t VALID) {
     return ((X) | ((Y) << 9) | ((ROT) << 18) | ((TYPE) << 27) | ((VALID) << 31));
 }
 int main() {
+    // load from file: Bullets.img
+    std::ifstream file("/home/ztn/Embedded/ip_repo/2DRenderer/Bullets.img", std::ios::binary);
+    file.read(reinterpret_cast<char *>(Bullet_sprite), 128 * 256 * 2);
+    file.close();
     SDL_Init(SDL_INIT_VIDEO);
 
     SDL_Window *window = SDL_CreateWindow("2DRenderer", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, FB_WIDTH, FB_HEIGHT, 0);
