@@ -5,6 +5,9 @@
 // just for vscode linter
 // #define __SYNTHESIS__
 // 16*(256*128)/1024 = 512KBit =  15BRAMs, size 0x10000 bytes
+uint32_t compose_entity_32(uint32_t X, uint32_t Y, uint32_t ROT, uint32_t TYPE, uint32_t VALID) {
+    return ((X) | ((Y) << 9) | ((ROT) << 18) | ((TYPE) << 27) | ((VALID) << 31));
+}
 #ifndef __SYNTHESIS__
 void render_2d(ap_uint<64> *vram, ap_uint<64> *game_info_ram, ap_uint<64> *bullet_map, ap_uint<1> fb1_alt) {
 #else
@@ -14,7 +17,10 @@ void render_2d(hls::burst_maxi<ap_uint<64>> vram,
 #endif
 
     ap_uint<64> bullet_sprite[BULLET_MAP_WIDTH * BULLET_MAP_HEIGHT / 4];
-    game_info_t game_info;
+    grid_info_t grid_info;
+    ap_uint<32> enemy_bullet[1536];
+    ap_uint<32> player_bullet[256];
+    ap_uint<32> entities[256];
     ap_uint<TILE_DEPTH> tile_fb[TILE_WIDTH * TILE_HEIGHT];
 #pragma HLS INTERFACE mode = ap_ctrl_hs port = return
 #pragma HLS INTERFACE mode = m_axi port = vram offset = off
@@ -30,7 +36,7 @@ void render_2d(hls::burst_maxi<ap_uint<64>> vram,
 #else
 read_bullet_map:
     // 32 burst read of 256 beats
-	// new: 128 burst read of 32 beats(128 width)
+    // new: 128 burst read of 32 beats(128 width)
     for (uint32_t i = 0; i < 128; i++) {
         vram.read_request(i * 64 + BULLET_MAP_ADDR / 8, 32);
         for (uint32_t j = 0; j < 32; j++) {
@@ -42,47 +48,120 @@ read_bullet_map:
     }
 #endif
 #ifndef __SYNTHESIS__
-    for (uint32_t i = 0; i < 8; i++) {
+    for (uint32_t i = 0; i < 4; i++) {
         for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
             uint64_t test_data = *game_info_ram;
             ap_uint<AXI_WIDTH> tmp_read = *game_info_ram;
             uint32_t tmp_addr = 2 * (i * READ_BURST_BEATS + j);
-            if (tmp_addr < 2688) {
-                game_info.enemy_bullets[tmp_addr] = tmp_read(31, 0);
-                game_info.enemy_bullets[tmp_addr + 1] = tmp_read(63, 32);
-            } else if (tmp_addr < 2688 + 1344) {
-                game_info.player_bullets[tmp_addr - 2688] = tmp_read(31, 0);
-                game_info.player_bullets[tmp_addr + 1 - 2688] = tmp_read(63, 32);
+            if (tmp_addr < 1536) {
+                enemy_bullet[tmp_addr] = tmp_read(31, 0);
+                enemy_bullet[tmp_addr + 1] = tmp_read(63, 32);
+            } else if (tmp_addr < 1536 + 256) {
+                player_bullet[tmp_addr - 1536] = tmp_read(31, 0);
+                player_bullet[tmp_addr + 1 - 1536] = tmp_read(63, 32);
             } else {
-                game_info.entities[tmp_addr - 4032] = tmp_read(31, 0);
-                game_info.entities[tmp_addr + 1 - 4032] = tmp_read(63, 32);
+                entities[tmp_addr - 1792] = tmp_read(31, 0);
+                entities[tmp_addr + 1 - 1792] = tmp_read(63, 32);
             }
             game_info_ram++;
         }
     }
 #else
 read_game_info:
-    // 8 burst read of 256 beats
-    for (uint32_t i = 0; i < 8; i++) {
+    // 4 burst read of 256 beats
+    for (uint32_t i = 0; i < 4; i++) {
         vram.read_request(i * READ_BURST_BEATS + GAME_INFO_ADDR / 8, READ_BURST_BEATS);
         for (uint32_t j = 0; j < READ_BURST_BEATS; j++) {
 #pragma HLS PIPELINE off
             ap_uint<AXI_WIDTH> tmp_read = vram.read();
             uint32_t tmp_addr = 2 * (i * READ_BURST_BEATS + j);
-            if (tmp_addr < 2688) {
-                game_info.enemy_bullets[tmp_addr] = tmp_read(31, 0);
-                game_info.enemy_bullets[tmp_addr + 1] = tmp_read(63, 32);
-            } else if (tmp_addr < 2688 + 1344) {
-                game_info.player_bullets[tmp_addr - 2688] = tmp_read(31, 0);
-                game_info.player_bullets[tmp_addr + 1 - 2688] = tmp_read(63, 32);
+            if (tmp_addr < 1536) {
+                enemy_bullet[tmp_addr] = tmp_read(31, 0);
+                enemy_bullet[tmp_addr + 1] = tmp_read(63, 32);
+            } else if (tmp_addr < 1536 + 256) {
+                player_bullet[tmp_addr - 1536] = tmp_read(31, 0);
+                player_bullet[tmp_addr + 1 - 1536] = tmp_read(63, 32);
             } else {
-                game_info.entities[tmp_addr - 4032] = tmp_read(31, 0);
-                game_info.entities[tmp_addr + 1 - 4032] = tmp_read(63, 32);
+                entities[tmp_addr - 1792] = tmp_read(31, 0);
+                entities[tmp_addr + 1 - 1792] = tmp_read(63, 32);
             }
         }
         // no response for read
     }
 #endif
+map_enemy_vram:
+    static uint16_t bucket[12 * 14]; // bucket for each tile, max 16 bullets for each tile
+    // clear bucket
+    for (int i = 0; i < 12 * 14; i++) {
+#pragma HLS PIPELINE off
+    	bucket[i] = 0;
+    }
+    for (int i = 0; i < 2688; i++) {
+#pragma HLS PIPELINE off
+    	grid_info.enemy_bullets[i] = 0;
+    }
+    for (int i = 0; i < 1536; i++) {
+#pragma HLS PIPELINE off
+        ap_uint<32> tmp_b = enemy_bullet[i];
+        if (GET_VALID(tmp_b)) {
+            sprite_t info = get_enemy_bullet_info(GET_TYPE(tmp_b));
+            int tile_x = GET_X(tmp_b) / 32;
+            int tile_y = GET_Y(tmp_b) / 32;
+            // right/bottom corner
+            int tile_x_end = (GET_X(tmp_b) + info.width) / 32;
+            int tile_y_end = (GET_Y(tmp_b) + info.height) / 32;
+            for (int k = 0; k <= 11; k++) {
+                for (int l = 0; l <= 13; l++) {
+#pragma HLS PIPELINE off
+                    int tile_idx = l * 12 + k;
+                    if (tile_x <= k && k <= tile_x_end && tile_y <= l && l <= tile_y_end) {
+                        // find a empty slot in this tile
+                        if (bucket[tile_idx] < 16) {
+                            grid_info.enemy_bullets[tile_idx * 16 + bucket[tile_idx]] = compose_entity_32(GET_X(tmp_b), GET_Y(tmp_b), 0, GET_TYPE(tmp_b), 1);
+                            bucket[tile_idx]++;
+                        } // else just ignore this bullet
+                    }
+                }
+            }
+        }
+    }
+map_player_vram:
+    // clear bucket
+    for (int i = 0; i < 12 * 14; i++) {
+#pragma HLS PIPELINE off
+    	bucket[i] = 0;
+    }
+    // clear the vram
+    for (int i = 0; i < 1344; i++) {
+#pragma HLS PIPELINE off
+    	grid_info.player_bullets[i] = 0;
+    }
+    for (int i = 0; i < 256; i++) {
+#pragma HLS PIPELINE off
+        ap_uint<32> tmp_b = player_bullet[i];
+        if (GET_VALID(tmp_b)) {
+            sprite_t info = get_player_bullet_info(GET_TYPE(tmp_b));
+            // left/top corner
+            int tile_x = GET_X(tmp_b) / 32;
+            int tile_y = GET_Y(tmp_b) / 32;
+            // right/bottom corner
+            int tile_x_end = (GET_X(tmp_b) + info.width) / 32;
+            int tile_y_end = (GET_Y(tmp_b) + info.height) / 32;
+            for (int k = 0; k <= 11; k++) {
+                for (int l = 0; l <= 13; l++) {
+#pragma HLS PIPELINE off
+                    int tile_idx = l * 12 + k;
+                    if (tile_x <= k && k <= tile_x_end && tile_y <= l && l <= tile_y_end) {
+                        // find a empty slot in this tile
+                        if (bucket[tile_idx] < 8) {
+                            grid_info.player_bullets[tile_idx * 8 + bucket[tile_idx]] = compose_entity_32(GET_X(tmp_b), GET_Y(tmp_b), 0, GET_TYPE(tmp_b), 1);
+                            bucket[tile_idx]++;
+                        } // else just ignore this bullet
+                    }
+                }
+            }
+        }
+    }
 render_frame_tile_y:
     for (int i = 0; i < TILE_Y_COUNT; i++) {
         // #pragma HLS PIPELINE off
@@ -105,8 +184,8 @@ render_frame_tile_y:
             render_enemy_bullets_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
 #pragma HLS PIPELINE
-//#pragma HLS UNROLL factor = 4
-//#pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 4
+                    // #pragma HLS UNROLL factor = 4
+                    // #pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 4
                 render_enemy_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
@@ -114,7 +193,7 @@ render_frame_tile_y:
 #pragma HLS PIPELINE
                         // if you need less drawn just change macro here MAX_ENEMY_BULLETS_IN_TILE
                     render_enemy_enum_bullets:
-                        ap_uint<32> tmp_bullet = game_info.enemy_bullets[(i * TILE_X_COUNT + j) * MAX_ENEMY_BULLETS_IN_TILE + m];
+                        ap_uint<32> tmp_bullet = grid_info.enemy_bullets[(i * TILE_X_COUNT + j) * MAX_ENEMY_BULLETS_IN_TILE + m];
                         if (GET_VALID(tmp_bullet) == 1) { // if valid
                             sprite_t tmp_sprite = get_enemy_bullet_info(GET_TYPE(tmp_bullet));
                             // TODO rotation and then check whether on current pixel
@@ -161,8 +240,8 @@ render_frame_tile_y:
             render_player_bullets_x:
                 for (int l = 0; l < TILE_WIDTH; l++) {
 #pragma HLS PIPELINE
-//#pragma HLS UNROLL factor = 2
-//#pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 2
+                    // #pragma HLS UNROLL factor = 2
+                    // #pragma HLS ARRAY_PARTITION variable = tile_fb dim = 2 type = cyclic factor = 2
                 render_player_bullets_y:
                     ap_uint<TILE_DEPTH> tmp_pixel = tile_fb[k * TILE_WIDTH + l]; // not drawing
                     ap_uint<8> alpha_ch = tmp_pixel(7, 0);
@@ -170,7 +249,7 @@ render_frame_tile_y:
 #pragma HLS PIPELINE
                         // if you need less just change macro here MAX_PLAYER_BULLETS_IN_TILE
                     render_player_enum_bullets:
-                        ap_uint<32> tmp_bullet = game_info.player_bullets[(i * TILE_X_COUNT + j) * MAX_PLAYER_BULLETS_IN_TILE + m];
+                        ap_uint<32> tmp_bullet = grid_info.player_bullets[(i * TILE_X_COUNT + j) * MAX_PLAYER_BULLETS_IN_TILE + m];
                         if (GET_VALID(tmp_bullet) == 1) { // if valid
                             sprite_t tmp_sprite = get_player_bullet_info(GET_TYPE(tmp_bullet));
                             int cur_pos_x = j * TILE_WIDTH + l;

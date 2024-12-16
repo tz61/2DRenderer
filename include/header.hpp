@@ -42,9 +42,8 @@
 typedef struct {
     ap_uint<32> enemy_bullets[TILE_X_COUNT * TILE_Y_COUNT * MAX_ENEMY_BULLETS_IN_TILE];   // 2688
     ap_uint<32> player_bullets[TILE_X_COUNT * TILE_Y_COUNT * MAX_PLAYER_BULLETS_IN_TILE]; // 1344 max 8 in single tile
-    ap_uint<32> entities[64];
     // first 14 enemy, 15th player, 16th boss, 17-24 item.
-} game_info_t;
+} grid_info_t;
 // (12*14*(16+8)+64)*4Byte = 0x4000 Byte
 // 0x4000/8B=2048
 // 2048/(256Beat)=8Burst

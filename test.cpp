@@ -39,29 +39,13 @@ int main() {
                         ((ap_uint<64>)Bullet_sprite[4 * i + 3] << 48);
     }
     // Enemy bullet test
-    // Tile (0,0)
     game_info_ram[0] = (compose_entity(0, 0, 0, 0, 1)) | (compose_entity(16, 16, 0, 1, 1) << 32);
-    // Tile (0,1)
-    game_info_ram[8] = (compose_entity(32, 0, 0, 2, 1)) | (compose_entity(32, 16, 0, 3, 1) << 32);
-    // Tile (0,2)
-    game_info_ram[2 * 8] = (compose_entity(64, 0, 0, 14, 1));
-    // Tile (0,3)
-    game_info_ram[3 * 8] = (compose_entity(96, 0, 0, 15, 1));
-    // Tile (1,3)
-    game_info_ram[3 * 8 + 96] = (compose_entity(96, 32, 0, 15, 1));
-    // Player bullet test
-    // Tile (0,4)
-    game_info_ram[1344 + 4 * 4] = (compose_entity(128, 0, 0, 0, 1)) | (compose_entity(128, 16, 0, 1, 1) << 32);
-    // Tile (0,5)
-    game_info_ram[1344 + 5 * 4] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
-    // Tile (0,6)
-    game_info_ram[1344 + 6 * 4] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
-    // Tile (1,5)
-    game_info_ram[1344 + 5 * 4 + 48] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
-    // Tile (1,6)
-    game_info_ram[1344 + 6 * 4 + 48] = (compose_entity(160, 0, 0, 2, 1)) | (compose_entity(160, 20, 0, 3, 1) << 32);
+    game_info_ram[1] = (compose_entity(16, 16, 0, 14, 1)) | (compose_entity(241, 126, 0, 15, 1) << 32);
+    // Player bullet test(random x y)
+    game_info_ram[1576/2] = (compose_entity(128, 0, 0, 0, 1)) | (compose_entity(128, 16, 0, 1, 1) << 32);
     bool quit = false;
     int fb_id = 0;
+    uint32_t x=0,y=0;
     while (!quit) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -72,6 +56,10 @@ int main() {
             }
         }
 
+        game_info_ram[1] = (compose_entity(x, y, 0, 14, 1));
+        x++;y++;
+        if(x>300)x=0;
+        if(y>300)y=0;
         SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0xFF, 0xFF);
         //         SDL_RenderClear(renderer);
         //
